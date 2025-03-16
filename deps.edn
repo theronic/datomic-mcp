@@ -1,0 +1,31 @@
+{:paths   ["src" "test"]
+ :deps    {org.clojure/clojure            {:mvn/version "1.12.0-alpha5"}
+
+           ; Schema Validation during I/O
+           metosin/malli                  {:mvn/version "0.17.0"}
+
+           ; Interleaved logging
+           com.taoensso/timbre            {:mvn/version "6.7.0-alpha1"}
+
+           theronic/modex                 {:git/url "https://github.com/theronic/modex"
+                                           :git/sha "7519bab23d0277d201641d848c2b8ccdf750e254"}
+                                           ;:local/root "../modex"} ; todo move to git or Clojars.
+
+           ; Datomic
+           com.datomic/peer                  {:mvn/version "1.0.6733"}
+                                              ;:exclusions  [org.slf4j/slf4j-nop org.slf4j/slf4j-log4j12]}
+
+           ;com.datomic/peer               {:mvn/version "1.0.6735"} ;; there is newer, but not sure about transactor
+           net.spy.memcached/spymemcached {:mvn/version "2.8-preview"}
+           org.postgresql/postgresql      {:mvn/version "42.6.0"}
+
+           ; For JSON encoding:
+           metosin/jsonista               {:mvn/version "0.3.13"}}
+ :aliases {:dev   {}
+           :build {:deps       {io.github.clojure/tools.build {:git/tag "v0.9.6" :git/sha "8e78bcc"}}
+                   :ns-default build}
+           :test  {:extra-paths ["test"]
+                   :extra-deps  {io.github.cognitect-labs/test-runner
+                                 {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+                   :main-opts   ["-m" "cognitect.test-runner"]
+                   :exec-fn     cognitect.test-runner.api/test}}}
