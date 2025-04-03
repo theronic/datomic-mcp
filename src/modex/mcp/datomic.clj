@@ -6,18 +6,39 @@
             [clojure.pprint :as pprint]
             [clojure.edn :as edn]
             [datomic.api :as d])
-  (:gen-class))
+  (:gen-class)
+  (:import (java.util.logging ConsoleHandler Level Logger StreamHandler)))
 
 (def !conn (atom nil))
 
 (def datomic-uri (System/getenv "DATOMIC_URI"))
 
+(defn redirect-datomic-logs-to-stderr! []
+  (let [root-logger    (Logger/getLogger "")
+        handlers       (.getHandlers root-logger)
+        stderr-handler (StreamHandler. System/err (java.util.logging.SimpleFormatter.))]
+
+    ;; Remove existing handlers
+    (doseq [handler handlers]
+      (.removeHandler root-logger handler))
+
+    ;; Add stderr handler
+    (.addHandler root-logger stderr-handler)
+
+    ;; Set desired log level
+    (.setLevel root-logger Level/INFO)))                    ;; Set root logger level
+
+(redirect-datomic-logs-to-stderr!)
+
 (defn connect!
   "This happens on tool init because connecting to prod Datomic can timeout client."
   [!conn datomic-uri]
-  (reset! !conn (d/connect datomic-uri)))
+  (log/info "Connecting to Datomic...")
+  (let [conn (d/connect datomic-uri)]
+    (log/info "Connected.")
+    (reset! !conn conn)))
 
-(comment ; todo: impl. shutdown in Modex.
+(comment                                                    ; todo: impl. shutdown in Modex.
   (.release conn))
 
 ;(def conn conn2)
@@ -55,11 +76,22 @@
 
 (comment
   (singular-value? 567)
-  (singular-value? {:a 5}) ; true
-  (singular-value? [{:a 5}]) ; false
+  (singular-value? {:a 5})                                  ; true
+  (singular-value? [{:a 5}])                                ; false
   (singular-value? [{:a 5}]))
 
 (def set-datomic-indices #{:eavt :aevt :avet :vaet})
+
+(defn q-handler
+  [db {:keys [qry args offset limit]
+       :or   {offset 0
+              limit  100}}]
+  (let [parsed-qry  (edn/read-string qry)
+        parsed-args (edn/read-string args)
+        result      (->> (apply d/q parsed-qry db parsed-args) (drop offset) (take limit))]
+    (map pr-str (if (singular-value? result)
+                  [result]
+                  result))))
 
 (def datomic-tools
   "Define your tools here."
@@ -73,20 +105,55 @@
     (q
       "Queries Datomic via `(take limit (apply datomic.api/q (d/db conn) qry args))`.
       Takes qry, vector of args and limit. Returns a collection of results.
-      Use `schema` tool to learn valid attributes before attempting to write queries. "
-      [^{:type :string :doc "EDN-encoded Datalog Query, e.g. \"[:find ?e :where [?e :some/attr ?value]]\""} qry
-       ^{:type :string :doc "EDN-encoded vector of Datalog Query Arguments, e.g. \"[1 2 3]\""} args
-       ^{:type :number :doc "Query limit. Used via (take limit query-result). Defaults to 100."} limit]
-      (let [parsed-qry  (edn/read-string qry)
-            parsed-args (edn/read-string args)
-            db          (d/db @!conn)
-            _ (prn 'running-query parsed-qry)
-            qry-result  (take (or limit 100) (apply d/q parsed-qry db parsed-args))]
-        ; parse qry & args.
-        ; ; because d/q can return single result, we need to support scalars
-        (if (singular-value? qry-result)
-          [qry-result]
-          qry-result)))
+      Use the `schema` tool to learn valid attributes before attempting to write queries. "
+      [{:keys [qry args offset limit]
+        :type {qry    :string
+               args   :string
+               offset :number
+               limit  :number}
+        :or   {limit  100
+               offset 0}
+        :doc  {qry    "EDN-encoded Datalog Query, e.g. \"[:find ?e :where [?e :some/attr ?value]]\""
+               args   "EDN-encoded vector of Datalog Query Arguments, e.g. \"[1 2 3]\""
+               offset "Query offset: (->> qry-result (drop offset)). Defaults to 0."
+               limit  "Query limit: (->> qry-result (drop offset) (take limit)). Defaults to 100."}}]
+      (q-handler (d/db @!conn) {:qry qry :args args :offset offset :limit limit}))
+
+    (q-with
+      "Like `q` tool, but prospectively applies tx-data using `datomic.api/with` and queries against db-after.
+
+      This runs:
+      ```
+      (let [db-after (-> (d/with db tx-data) :db-after)]
+         (->> (apply datomic.api/q qry db-after args)
+              (drop offset)
+              (take limit)))
+      ```
+
+      Accepts {:keys [tx-data qry args offset limit]} & returns a collection of results.
+
+      tx-data, qry & args are EDN-encoded strings. offset & limit are numbers.
+
+      Use the `schema` tool to learn valid attributes before attempting to write queries. "
+      [{:keys [tx-data
+               qry args
+               offset limit]
+        :type {tx-data :string
+               qry     :string
+               args    :string
+               offset  :number
+               limit   :number}
+        :or   {offset 0
+               limit  100}
+        :doc  {tx-data "EDN-encoded tx-data collection is passed to datomic.api/with, e.g. \"[{:db/id 1234 :some/attr \"new-value\"} [:db/add ...] [:db/retract ...]]\""
+               qry     "EDN-encoded Datalog Query, e.g. \"[:find ?e :where [?e :some/attr ?value]]\""
+               args    "EDN-encoded vector of Datalog Query Arguments, e.g. \"[1 2 3]\""
+               offset  "Query offset: (->> qry-result (drop offset)). Defaults to 0."
+               limit   "Query limit: (->> qry-result (drop offset) (take limit)). Defaults to 100."}}]
+      (let [parsed-tx-data (clojure.edn/read-string tx-data)
+            db-before      (d/db @!conn)
+            {:as _rx :keys [db-after]} (d/with db-before parsed-tx-data)]
+        (q-handler db-after {:qry qry :args args :offset offset :limit limit})))
 
     (datoms
       "Runs `(datomic.api/datoms db index & components)` and returns an iterable of datoms,
@@ -104,33 +171,92 @@ supplied to narrow the result.
       E.g. (d/datoms db :aevt :server/name) will return datoms where entity has :server/name attribute.
 
       Use `schema` tool to learn valid attributes before attempting to write queries. "
-      [^{:type :string :doc "EDN-encoded keyword. One of `:eavt`, `:aevt`, `:avet` (if :db/index = true) or `:vaet`"} index
-       ^{:type :string :doc "EDN-encoded vector of `components` passed to d/datoms, e.g. \"[:server/name 123]\""} components
-       ^{:type :number :doc "(->> datoms (drop offset)). Defaults to 0.", :required false} offset
-       ^{:type :number :doc "(->> datoms (drop offset) (take limit)). Defaults to 100.", :required false} limit]
-      (let [parsed-index      (edn/read-string index) ; should be keyword.
+      [{:keys [index components offset limit]
+        :doc  {index      "EDN-encoded keyword. One of `:eavt`, `:aevt`, `:avet` or `:vaet`. `:avet` is only available if attr is indexed."
+               components "EDN-encoded vector of `components` passed to d/datoms, e.g. \"[:server/name \"server name\"]\""
+               offset     "Offset: (->> datoms (drop offset)). Defaults to 0."
+               limit      "Limit: (->> datoms (drop offset) (take limit)). Defaults to 100."}
+        :type {index      :string
+               components :string
+               offset     :number
+               limit      :number}
+        :or   {offset 0
+               limit  100}}]
+      ;^{:type :string :doc "EDN-encoded keyword. One of `:eavt`, `:aevt`, `:avet` (if :db/index = true) or `:vaet`"} index
+      ;^{:type :string :doc "EDN-encoded vector of `components` passed to d/datoms, e.g. \"[:server/name 123]\""} components
+      ;^{:type :number :doc "Offset: (->> datoms (drop offset)). Defaults to 0.", :required false} offset
+      ;^{:type :number :doc "Limit: (->> datoms (drop offset) (take limit)). Defaults to 100.", :required false} limit]
+      (let [parsed-index      (edn/read-string index)       ; should be keyword.
             _                 (assert (keyword? parsed-index) "index must be keyword.")
             _                 (assert (get set-datomic-indices parsed-index) (str "index must be one of: " (pr-str set-datomic-indices)))
             parsed-components (edn/read-string components)
-            db                (d/db @!conn) ; todo as-of.
+            db                (d/db @!conn)                 ; todo as-of.
             ; todo pagination.
             datoms            (->> (apply d/datoms db parsed-index parsed-components)
                                    (drop (or offset 0))
                                    (take (or limit 100)))]
-        datoms))))
-
-(def datomic-mcp-server
-  "Here we create a reified instance of AServer. Only tools are presently supported."
-  (server/->server
-    {:name      "Datomic MCP Server (Modex)"
-     :version   "0.0.1"
-     :tools     datomic-tools
-     :initialize (fn [] (connect! !conn datomic-uri))
-     ; todo shutdown.
-     :prompts   nil
-     :resources nil}))
+        (map pr-str datoms)))))
 
 (comment
+  datomic-tools)
+
+(defn make-datomic-mcp-server
+  "Here we create a reified instance of AServer. Only tools are presently supported."
+  [datomic-uri]
+  (server/->server
+    {:name       "Datomic MCP Server (Modex)"
+     :version    "0.0.1"
+     :tools      datomic-tools
+     :initialize (fn [init-params] (connect! !conn datomic-uri)) ; is called in future.
+     ; todo shutdown.
+     :prompts    nil
+     :resources  nil}))
+
+(comment
+  (def in-mem-datomic-uri "datomic:mem://datomic-mcp")
+  (d/create-database in-mem-datomic-uri)
+
+  (def *server (make-datomic-mcp-server in-mem-datomic-uri))
+
+  (mcp/list-tools *server)
+
+  (require '[clojure.repl :refer [doc source]])
+  (source mcp/call-tool)
+
+  (mcp/initialize *server)                                  ; connects
+  ;
+  (server/handle-request
+    *server
+    {:method  "tools/call"
+     :params  {:name      "q"
+               :arguments {:qry    "[:find ?ident :where [?e :db/ident ?ident]]",
+                           :args   "[]"
+                           ;:offset 0                        ; fix this error!
+                           :limit  10}}
+     :jsonrpc "2.0"
+     :id      44})
+
+  (require '[modex.mcp.tools :as tools])
+
+  ; invoke-handler returns results directly:
+  (tools/invoke-handler
+    (get-in datomic-tools [:datoms :handler])
+    {:components "[1]"
+     :index      ":eavt"
+     :limit      100
+     :offset     0})
+
+  (mcp/call-tool *server :q {:qry    "[:find ?e ?ident :where [?e :db/ident ?ident]]"
+                             :args   nil
+                             :offset 0
+                             :limit  100})
+
+  ; mcp/call-tool wraps results in {:keys [success results ?errors]}
+  (mcp/call-tool *server :datoms {:components "[1]"
+                                  :index      ":eavt"
+                                  :offset     0
+                                  :limit      100})
+
   (mcp/initialize datomic-mcp-server))
 
 (defn -main
@@ -138,7 +264,8 @@ supplied to narrow the result.
   [& args]
   (log/debug "Server starting via -main")
   (try
-    (server/start-server! datomic-mcp-server)
+    (let [mcp-server (make-datomic-mcp-server datomic-uri)]
+      (server/start-server! mcp-server))
     (catch Throwable t
       (log/debug "Fatal error in -main:" (.getMessage t))
       (.printStackTrace t (java.io.PrintWriter. *err*)))))

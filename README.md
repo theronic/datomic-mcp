@@ -13,7 +13,7 @@ Set environment variable DATOMIC_URI.
   "mcpServers": {
     "modex-datomic-mcp": {
       "command": "java",
-      "args": ["-jar", "/Users/petrus/code/datomic-mcp/target/theronic-datomic-mcp-0.1.0.jar"],
+      "args": ["-jar", "/Users/petrus/code/datomic-mcp/target/theronic-datomic-mcp-0.1.1.jar"],
       "env": {"DATOMIC_URI": "<your datomic URI here>"}
     }
   },

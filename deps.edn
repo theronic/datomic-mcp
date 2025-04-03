@@ -8,8 +8,8 @@
            com.taoensso/timbre            {:mvn/version "6.7.0-alpha1"}
 
            theronic/modex                 {:git/url "https://github.com/theronic/modex"
-                                           :git/sha "7519bab23d0277d201641d848c2b8ccdf750e254"}
-                                           ;:local/root "../modex"} ; todo move to git or Clojars.
+                                           :git/sha "576ca2efc0b9e2421ad9eb6d4cd472e224a06121"}
+                                           ;:local/root "../modex"} ; todo Clojars.
 
            ; Datomic
            com.datomic/peer                  {:mvn/version "1.0.6733"}
