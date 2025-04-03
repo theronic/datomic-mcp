@@ -2,9 +2,7 @@
 
 Built with [Modex](https://github.com/theronic/modex).
 
-Will improve README soon.
-
-Set environment variable DATOMIC_URI.
+Set environment variable `DATOMIC_URI` in your MCP config. Example below.
 
 ## Build Uberjar & Configure Claude Desktop
 
@@ -13,7 +11,7 @@ Set environment variable DATOMIC_URI.
   "mcpServers": {
     "modex-datomic-mcp": {
       "command": "java",
-      "args": ["-jar", "/Users/petrus/code/datomic-mcp/target/theronic-datomic-mcp-0.1.1.jar"],
+      "args": ["-jar", "/Users/petrus/code/datomic-mcp/target/theronic-datomic-mcp-0.3.0.jar"],
       "env": {"DATOMIC_URI": "<your datomic URI here>"}
     }
   },
@@ -21,17 +19,30 @@ Set environment variable DATOMIC_URI.
 }
 ```
 
-## License 
+## Datomic API Support
 
-In summary:
-- **Free for non-commercial use**: Use it, modify it, share it under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.html) at no cost, just keep it open source.
-- **Commercial use**: Want to keep your changes private? Pay $20 once-off for a perpetual commercial license. This covers the cost of my AI tokens to keep building this in public.
+- [In Progress] Concurrent queries (requires concurrency-safe bus for reads/writes in Modex)
+- [x] `datomic.api/q`
+- [x] `datomic.api/datoms`
+- [x] `datomic.api/with` (via `q-with` tool)
+- [x] `datomic.api/pull`
+- [x] `datomic.api/pull-many`
+- [x] `datomic.api/entity`
+- [x] `datomic.api/touch`
+- [x] `datomic.api/entid`
+- [ ] `datomic.api/transact` – not sure if good idea :)
+- [ ] Send Progress Messages Connection Progress
+- [ ] Better cursor-based pagination
+- [ ] Stable `db` basis (currently each query runs `(d/db conn)`) – easy to fix.
+- [ ] `d/as-of` support. Related to basis above.
 
-This tool is licensed under the [GNU General Public License v3.0 (GPLv3)](https://www.gnu.org/licenses/gpl-3.0.html). You are free to use, modify, and distribute it, provided that any derivative works are also licensed under the GPLv3 and made open source. This ensures the tool remains freely available to the community while requiring transparency for any changes.
+## License
 
-If you wish to use or modify this tool in a proprietary project—without releasing your changes under the GPLv3—you 
-may purchase a commercial license. This allows you to keep your modifications private for personal or commercial use.
-To obtain a commercial license, please contact me at [modex@petrus.co.za](mailto:modex@petrus.co.za).
+MIT Licence. Free for commercial & non-commercial use.
+
+All I ask is that if you find a bug in datomic-mcp or Modex, please report it :)
+
+Note that Modex itself has a different licence.
 
 ## Author(s)
 

@@ -35,7 +35,7 @@
   [!conn datomic-uri]
   (log/info "Connecting to Datomic...")
   (let [conn (d/connect datomic-uri)]
-    (log/info "Connected.")
+    (log/info "Connected to Datomic.")
     (reset! !conn conn)))
 
 (comment                                                    ; todo: impl. shutdown in Modex.
@@ -102,10 +102,69 @@
       []
       (query-schema (d/db @!conn)))
 
+    (entid
+      "Returns the entity id associated with a symbolic keyword, or the id itself if passed.
+
+      Runs: (->> (datomic.api/entid db ident) (pr-str))."
+      [{:keys [ident]
+        :type {ident :string}
+        :doc  {ident "EDN-encoded string with Datomic ident, :db/ident keyword or eid, e.g. 123, [:unique/ident :abc] or :db/ident value."}}]
+      (->> (edn/read-string ident)
+           (d/entid (d/db @!conn))
+           (pr-str)
+           (vector)))
+
+    (entity
+      "(->> (datomic.api/entity db eid) (pr-str))"
+      [{:keys [eid]
+        :type {eid :number}
+        :doc  {eid "Datomic :db/id entity ID (Long)"}}]
+      [(pr-str (d/entity (d/db @!conn) eid))])
+
+    (touch
+      "Runs (->> (datomic.api/entity db eid) (datomic.api/touch) (pr-str))."
+      [{:keys [eid]
+        :type {eid :number}
+        :doc  {eid "Datomic :db/id entity ID (Long)"}}]
+      (let [db (d/db @!conn)]
+        (->> eid
+             (d/entity db)
+             (d/touch)
+             (pr-str)
+             (vector)))
+
+    (pull
+      "Runs (->> (datomic.api/pull db pattern eid) (pr-str)).
+      Refer to schema tool for valid patterns."
+      [{:keys [pattern eid]
+        :type {pattern :string
+               eid     :number}
+        :doc  {pattern "EDN-encoded Datalog pattern, e.g. '[*]'"
+               eid     "Datomic :db/id entity ID (Long) to pull."}}]
+      [(pr-str (d/pull (d/db @!conn) pattern eid))])
+
+    (pull-many
+      "Datomic pull-many.
+      Runs (->> eids (datomic.api/pull-many db pattern) (mapv pr-str)).
+
+      Refer to schema tool for valid patterns."
+      [{:keys [pattern eids]
+        :type {pattern :string
+               eids    :string}
+        :doc  {pattern "EDN-encoded Datalog pattern, e.g. '[*]'"
+               eids    "EDN-encoded vector of Datomic :db/id entity IDs (Longs) to send to pull-many, e.g. \"[1 2 3]\"."}}]
+      (let [edn-pattern (edn/read-string pattern)
+            edn-eids    (edn/read-string eids)]
+        (->> edn-eids
+             (d/pull-many (d/db @!conn) edn-pattern)
+             (mapv pr-str))))
+
     (q
-      "Queries Datomic via `(take limit (apply datomic.api/q (d/db conn) qry args))`.
+      "Query Datomic.
+      Runs `(->> (apply datomic.api/q (d/db conn) qry args) (drop offset) (take limit))`.
       Takes qry, vector of args and limit. Returns a collection of results.
-      Use the `schema` tool to learn valid attributes before attempting to write queries. "
+
+      Use the `schema` tool to learn valid attributes before attempting queries."
       [{:keys [qry args offset limit]
         :type {qry    :string
                args   :string
@@ -229,10 +288,10 @@ supplied to narrow the result.
     *server
     {:method  "tools/call"
      :params  {:name      "q"
-               :arguments {:qry    "[:find ?ident :where [?e :db/ident ?ident]]",
-                           :args   "[]"
+               :arguments {:qry   "[:find ?ident :where [?e :db/ident ?ident]]",
+                           :args  "[]"
                            ;:offset 0                        ; fix this error!
-                           :limit  10}}
+                           :limit 10}}
      :jsonrpc "2.0"
      :id      44})
 
