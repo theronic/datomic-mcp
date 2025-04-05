@@ -21,7 +21,7 @@ Set environment variable `DATOMIC_URI` in your MCP config. Example below.
 
 ## Datomic API Support
 
-- [In Progress] Concurrent queries (requires concurrency-safe bus for reads/writes in Modex)
+- [x] Concurrent queries (async message handling since Modex 0.3.0)
 - [x] `datomic.api/q`
 - [x] `datomic.api/datoms`
 - [x] `datomic.api/with` (via `q-with` tool)
