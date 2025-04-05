@@ -8,7 +8,7 @@
            com.taoensso/timbre            {:mvn/version "6.7.0-alpha1"}
 
            theronic/modex                 {:git/url "https://github.com/theronic/modex"
-                                           :git/sha "576ca2efc0b9e2421ad9eb6d4cd472e224a06121"}
+                                           :git/sha "1b3faf910276c4e056a65c5572f3d9d159bb69c0"}
                                            ;:local/root "../modex"} ; todo Clojars.
 
            ; Datomic
@@ -22,7 +22,8 @@
            ; For JSON encoding:
            metosin/jsonista               {:mvn/version "0.3.13"}}
  :aliases {:dev   {}
-           :build {:deps       {io.github.clojure/tools.build {:git/tag "v0.9.6" :git/sha "8e78bcc"}}
+           :build {:extra-paths ["src-build"]
+                   :deps       {io.github.clojure/tools.build {:git/tag "v0.9.6" :git/sha "8e78bcc"}}
                    :ns-default build}
            :test  {:extra-paths ["test"]
                    :extra-deps  {io.github.cognitect-labs/test-runner

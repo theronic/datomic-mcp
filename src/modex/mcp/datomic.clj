@@ -131,7 +131,7 @@
              (d/entity db)
              (d/touch)
              (pr-str)
-             (vector)))
+             (vector))))
 
     (pull
       "Runs (->> (datomic.api/pull db pattern eid) (pr-str)).
@@ -241,16 +241,11 @@ supplied to narrow the result.
                limit      :number}
         :or   {offset 0
                limit  100}}]
-      ;^{:type :string :doc "EDN-encoded keyword. One of `:eavt`, `:aevt`, `:avet` (if :db/index = true) or `:vaet`"} index
-      ;^{:type :string :doc "EDN-encoded vector of `components` passed to d/datoms, e.g. \"[:server/name 123]\""} components
-      ;^{:type :number :doc "Offset: (->> datoms (drop offset)). Defaults to 0.", :required false} offset
-      ;^{:type :number :doc "Limit: (->> datoms (drop offset) (take limit)). Defaults to 100.", :required false} limit]
       (let [parsed-index      (edn/read-string index)       ; should be keyword.
             _                 (assert (keyword? parsed-index) "index must be keyword.")
             _                 (assert (get set-datomic-indices parsed-index) (str "index must be one of: " (pr-str set-datomic-indices)))
             parsed-components (edn/read-string components)
             db                (d/db @!conn)                 ; todo as-of.
-            ; todo pagination.
             datoms            (->> (apply d/datoms db parsed-index parsed-components)
                                    (drop (or offset 0))
                                    (take (or limit 100)))]
